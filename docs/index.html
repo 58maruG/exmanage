@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支出管理ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --text: #1f2933;
+    --muted: #7b8794;
+    --accent: #00897b;
+    --accent-dark: #00695c;
+    --border: #e4e7eb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 16px; }
+
+  /* ===== ログイン画面 ===== */
+  #login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .login-card {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    padding: 32px 24px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+  }
+  .login-card h1 { font-size: 1.25rem; margin-bottom: 6px; }
+  .login-card p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .login-card input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+  .btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .btn:active { background: var(--accent-dark); }
+  .error { color: #d32f2f; font-size: 0.85rem; margin-top: 10px; min-height: 1.2em; }
+
+  /* ===== ダッシュボード ===== */
+  #app { display: none; }
+  header.app-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  header.app-head h1 { font-size: 1.15rem; }
+  .lock-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .tabs {
+    display: flex;
+    background: var(--card);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    margin-bottom: 12px;
+  }
+  .tabs button {
+    flex: 1;
+    padding: 9px;
+    border: none;
+    background: none;
+    font-size: 0.95rem;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .tabs button.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .nav button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .nav button:disabled { opacity: 0.3; cursor: default; }
+  .nav .label { font-size: 1.1rem; font-weight: 600; }
+
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .summary { display: flex; gap: 10px; }
+  .summary .item { flex: 1; text-align: center; }
+  .summary .item .val { font-size: 1.35rem; font-weight: 700; color: var(--accent-dark); }
+  .summary .item .val.small { font-size: 1.05rem; }
+  .summary .item .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+  .chart-box { position: relative; height: 240px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { padding: 9px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  tr.receipt { cursor: pointer; }
+  tr.receipt:active { background: #f0f4f4; }
+  .toggle { color: var(--muted); font-size: 0.7rem; }
+  tr.items-row { display: none; }
+  tr.items-row.open { display: table-row; }
+  tr.items-row td { background: #fafbfc; padding: 0; }
+  .items-inner { padding: 4px 6px 8px 18px; }
+  .items-inner .it {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.82rem;
+  }
+  .items-inner .it .cat {
+    color: var(--muted);
+    font-size: 0.72rem;
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+  .empty { text-align: center; color: var(--muted); padding: 28px 0; font-size: 0.9rem; }
+  .pill {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #eceff1;
+    color: #546e7a;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン画面 ===== -->
+<div id="login">
+  <div class="login-card">
+    <h1>支出管理ダッシュボード</h1>
+    <p>閲覧用パスワードを入力してください</p>
+    <input type="password" id="pw" placeholder="パスワード" autocomplete="current-password">
+    <button class="btn" id="unlock">表示する</button>
+    <div class="error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ===== ダッシュボード ===== -->
+<div id="app">
+  <div class="wrap">
+    <header class="app-head">
+      <h1>支出管理</h1>
+      <button class="lock-btn" id="lock">ロック</button>
+    </header>
+
+    <div class="tabs">
+      <button data-mode="day">日</button>
+      <button data-mode="month" class="active">月</button>
+      <button data-mode="year">年</button>
+    </div>
+
+    <div class="nav">
+      <button id="prev">◀</button>
+      <div class="label" id="periodLabel"></div>
+      <button id="next">▶</button>
+    </div>
+
+    <div class="card">
+      <div class="summary">
+        <div class="item"><div class="val" id="sumTotal">¥0</div><div class="lbl">合計支出</div></div>
+        <div class="item"><div class="val" id="sumCount">0</div><div class="lbl">レシート数</div></div>
+        <div class="item"><div class="val small" id="sumTop">-</div><div class="lbl">最多カテゴリ</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>カテゴリ別の内訳</h2>
+      <div class="chart-box"><canvas id="catChart"></canvas></div>
+    </div>
+
+    <div class="card" id="trendCard">
+      <h2 id="trendTitle">推移</h2>
+      <div class="chart-box"><canvas id="trendChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>レシート一覧（行をタップで明細表示）</h2>
+      <div id="tableArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ===== 暗号化設定（tools/encrypt.py と一致させること） =====
+const ITERATIONS = 200000;
+
+// ===== カテゴリ色 =====
+const CAT_COLORS = {
+  "食料品": "#4caf50", "日用品": "#2196f3", "外食": "#ff9800",
+  "交通": "#9c27b0", "衣類": "#e91e63", "医療・衛生": "#00bcd4",
+  "娯楽": "#ffc107", "光熱費": "#f44336", "通信費": "#3f51b5", "その他": "#607d8b"
+};
+const FALLBACK_COLORS = ["#26a69a", "#8d6e63", "#789262", "#5c6bc0", "#ec407a"];
+function colorFor(name, idx) {
+  return CAT_COLORS[name] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+}
+
+// ===== 状態 =====
+let EXPENSES = [];      // レシート配列
+let mode = "month";     // "day" | "month" | "year"
+let cursor = new Date();
+let catChart = null;
+let trendChart = null;
+
+// ===== ユーティリティ =====
+function b64ToBytes(b64) {
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+function yen(n) { return "¥" + Math.round(n).toLocaleString("ja-JP"); }
+function pad(n) { return String(n).padStart(2, "0"); }
+function fmtDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+function fmtMonth(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1); }
+function receiptTotal(r) { return r.items.reduce((s, it) => s + (Number(it.price) || 0), 0); }
+
+// ===== 復号 =====
+async function decrypt(encObj, password) {
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    "raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: b64ToBytes(encObj.salt), iterations: encObj.iterations || ITERATIONS, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"]
+  );
+  const plainBuf = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(encObj.iv) },
+    key,
+    b64ToBytes(encObj.data)
+  );
+  return JSON.parse(new TextDecoder().decode(plainBuf));
+}
+
+// ===== データ取得・ログイン =====
+async function tryUnlock(password) {
+  let encObj;
+  try {
+    const res = await fetch("expenses.enc", { cache: "no-store" });
+    if (!res.ok) throw new Error("not found");
+    encObj = await res.json();
+  } catch (e) {
+    throw new Error("データファイル(expenses.enc)を読み込めませんでした。");
+  }
+  let data;
+  try {
+    data = await decrypt(encObj, password);
+  } catch (e) {
+    throw new Error("パスワードが違います。");
+  }
+  return data;
+}
+
+function startApp(data) {
+  EXPENSES = (data && data.receipts) ? data.receipts : [];
+  // 最新のレシート日付を初期表示位置にする
+  if (EXPENSES.length > 0) {
+    const latest = EXPENSES.map(r => r.date).sort().slice(-1)[0];
+    cursor = new Date(latest + "T00:00:00");
+  }
+  document.getElementById("login").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  render();
+}
+
+document.getElementById("unlock").addEventListener("click", doUnlock);
+document.getElementById("pw").addEventListener("keydown", e => {
+  if (e.key === "Enter") doUnlock();
+});
+
+async function doUnlock() {
+  const pw = document.getElementById("pw").value;
+  const errEl = document.getElementById("loginError");
+  errEl.textContent = "";
+  if (!pw) { errEl.textContent = "パスワードを入力してください。"; return; }
+  document.getElementById("unlock").disabled = true;
+  try {
+    const data = await tryUnlock(pw);
+    sessionStorage.setItem("exmanage_data", JSON.stringify(data));
+    startApp(data);
+  } catch (e) {
+    errEl.textContent = e.message;
+  } finally {
+    document.getElementById("unlock").disabled = false;
+  }
+}
+
+document.getElementById("lock").addEventListener("click", () => {
+  sessionStorage.removeItem("exmanage_data");
+  location.reload();
+});
+
+// ===== 期間操作 =====
+document.querySelectorAll(".tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    render();
+  });
+});
+document.getElementById("prev").addEventListener("click", () => { shift(-1); });
+document.getElementById("next").addEventListener("click", () => { shift(1); });
+
+function shift(dir) {
+  if (mode === "day") cursor.setDate(cursor.getDate() + dir);
+  else if (mode === "month") cursor.setMonth(cursor.getMonth() + dir);
+  else cursor.setFullYear(cursor.getFullYear() + dir);
+  render();
+}
+
+// ===== 集計 =====
+function periodReceipts() {
+  if (mode === "day") {
+    const key = fmtDate(cursor);
+    return EXPENSES.filter(r => r.date === key);
+  } else if (mode === "month") {
+    const key = fmtMonth(cursor);
+    return EXPENSES.filter(r => r.date.slice(0, 7) === key);
+  } else {
+    const key = String(cursor.getFullYear());
+    return EXPENSES.filter(r => r.date.slice(0, 4) === key);
+  }
+}
+
+function periodLabel() {
+  const y = cursor.getFullYear();
+  if (mode === "day") return y + "年" + (cursor.getMonth() + 1) + "月" + cursor.getDate() + "日";
+  if (mode === "month") return y + "年" + (cursor.getMonth() + 1) + "月";
+  return y + "年";
+}
+
+// ===== 描画 =====
+function render() {
+  document.getElementById("periodLabel").textContent = periodLabel();
+  const receipts = periodReceipts();
+  renderSummary(receipts);
+  renderCategoryChart(receipts);
+  renderTrendChart(receipts);
+  renderTable(receipts);
+}
+
+function renderSummary(receipts) {
+  let total = 0;
+  const byCat = {};
+  receipts.forEach(r => {
+    r.items.forEach(it => {
+      const p = Number(it.price) || 0;
+      total += p;
+      byCat[it.major] = (byCat[it.major] || 0) + p;
+    });
+  });
+  document.getElementById("sumTotal").textContent = yen(total);
+  document.getElementById("sumCount").textContent = receipts.length + "件";
+  const top = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+  document.getElementById("sumTop").textContent = top ? top[0] : "-";
+}
+
+function renderCategoryChart(receipts) {
+  const byCat = {};
+  receipts.forEach(r => r.items.forEach(it => {
+    byCat[it.major] = (byCat[it.major] || 0) + (Number(it.price) || 0);
+  }));
+  const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const labels = entries.map(e => e[0]);
+  const values = entries.map(e => e[1]);
+  const colors = labels.map((l, i) => colorFor(l, i));
+
+  if (catChart) catChart.destroy();
+  const ctx = document.getElementById("catChart");
+  if (entries.length === 0) {
+    const c = ctx.getContext("2d");
+    c.clearRect(0, 0, ctx.width, ctx.height);
+    return;
+  }
+  catChart = new Chart(ctx, {
+    type: "doughnut",
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 1, borderColor: "#fff" }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 11 }, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: c => {
+              const sum = values.reduce((s, v) => s + v, 0);
+              const pct = sum ? Math.round(c.parsed / sum * 100) : 0;
+              return c.label + ": " + yen(c.parsed) + " (" + pct + "%)";
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTrendChart(receipts) {
+  const card = document.getElementById("trendCard");
+  if (mode === "day") { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  let labels = [], values = [], title = "";
+  if (mode === "month") {
+    title = "日別の支出推移";
+    const days = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+    labels = Array.from({ length: days }, (_, i) => String(i + 1));
+    values = new Array(days).fill(0);
+    receipts.forEach(r => {
+      const d = Number(r.date.slice(8, 10));
+      if (d >= 1 && d <= days) values[d - 1] += receiptTotal(r);
+    });
+  } else {
+    title = "月別の支出推移";
+    labels = Array.from({ length: 12 }, (_, i) => (i + 1) + "月");
+    values = new Array(12).fill(0);
+    receipts.forEach(r => {
+      const m = Number(r.date.slice(5, 7));
+      if (m >= 1 && m <= 12) values[m - 1] += receiptTotal(r);
+    });
+  }
+  document.getElementById("trendTitle").textContent = title;
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById("trendChart"), {
+    type: "bar",
+    data: { labels, datasets: [{ data: values, backgroundColor: "#00897b", borderRadius: 4 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => yen(c.parsed.y) } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { callback: v => "¥" + v.toLocaleString("ja-JP"), font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderTable(receipts) {
+  const area = document.getElementById("tableArea");
+  if (receipts.length === 0) {
+    area.innerHTML = '<div class="empty">この期間の記録はありません</div>';
+    return;
+  }
+  const sorted = receipts.slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  let html = '<table><thead><tr>'
+    + '<th>日付</th><th>店名</th><th>支払</th><th class="num">金額</th><th></th>'
+    + '</tr></thead><tbody>';
+  sorted.forEach((r, i) => {
+    const md = r.date.slice(5).replace("-", "/");
+    html += '<tr class="receipt" data-idx="' + i + '">'
+      + '<td>' + md + '</td>'
+      + '<td>' + escapeHtml(r.store) + '</td>'
+      + '<td><span class="pill">' + escapeHtml(r.payment) + '</span></td>'
+      + '<td class="num">' + yen(receiptTotal(r)) + '</td>'
+      + '<td class="toggle">＋</td></tr>';
+    html += '<tr class="items-row" data-items="' + i + '"><td colspan="5"><div class="items-inner">';
+    r.items.forEach(it => {
+      html += '<div class="it"><span>' + escapeHtml(it.name)
+        + '<span class="cat">' + escapeHtml(it.major) + " / " + escapeHtml(it.minor) + '</span></span>'
+        + '<span>' + yen(it.price) + '</span></div>';
+    });
+    html += '</div></td></tr>';
+  });
+  html += '</tbody></table>';
+  area.innerHTML = html;
+
+  area.querySelectorAll("tr.receipt").forEach(row => {
+    row.addEventListener("click", () => {
+      const idx = row.dataset.idx;
+      const itemsRow = area.querySelector('tr.items-row[data-items="' + idx + '"]');
+      const open = itemsRow.classList.toggle("open");
+      row.querySelector(".toggle").textContent = open ? "－" : "＋";
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+// ===== 起動時：セッションに復号済みデータがあれば再ログイン省略 =====
+(function () {
+  const cached = sessionStorage.getItem("exmanage_data");
+  if (cached) {
+    try { startApp(JSON.parse(cached)); return; }
+    catch (e) { sessionStorage.removeItem("exmanage_data"); }
+  }
+  document.getElementById("pw").focus();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# ローカル設定（パスワード等を含むため公開しない）
+config.json
+
+# 平文の支出マスターデータ（公開しない。公開するのは docs/expenses.enc のみ）
+data/expenses.json
+
+# レシート画像（リポジトリには含めない）
+receipts/
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code のローカル設定
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
