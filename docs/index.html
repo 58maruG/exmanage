@@ -183,6 +183,8 @@
   .summary .item .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
 
   .chart-box { position: relative; height: 240px; }
+  /* iOS Safari は cursor:pointer の無い要素ではタップでclickが発火しないため明示する */
+  #catChart { cursor: pointer; }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th, td { padding: 9px 6px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -517,6 +519,9 @@ function renderCategoryChart(receipts) {
 
   if (catChart) catChart.destroy();
   const ctx = document.getElementById("catChart");
+  // 大分類表示中（タップでドリルダウン可能なとき）は pointer にする。
+  // iOS Safari は pointer の無い要素のタップで click を発火しないため必須。
+  ctx.style.cursor = (catDrill === null) ? "pointer" : "default";
   if (entries.length === 0) {
     ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
     return;
@@ -536,10 +541,6 @@ function renderCategoryChart(receipts) {
       responsive: true,
       maintainAspectRatio: false,
       onClick: (evt, els) => { if (els.length) drillInto(els[0].index); },
-      onHover: (evt, els) => {
-        evt.native.target.style.cursor =
-          (catDrill === null && els.length) ? "pointer" : "default";
-      },
       plugins: {
         legend: {
           position: "bottom",
