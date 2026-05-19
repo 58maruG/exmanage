@@ -43,14 +43,32 @@
   }
   .login-card h1 { font-size: 1.25rem; margin-bottom: 6px; }
   .login-card p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .pw-field { position: relative; margin-bottom: 12px; }
   .login-card input {
     width: 100%;
-    padding: 12px 14px;
+    padding: 12px 46px 12px 14px;
     font-size: 1rem;
     border: 1px solid var(--border);
     border-radius: 10px;
-    margin-bottom: 12px;
   }
+  .pw-toggle {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 0;
+  }
+  .pw-toggle:active { background: #eceff1; }
   .btn {
     width: 100%;
     padding: 12px;
@@ -190,7 +208,10 @@
   <div class="login-card">
     <h1>支出管理ダッシュボード</h1>
     <p>閲覧用パスワードを入力してください</p>
-    <input type="password" id="pw" placeholder="パスワード" autocomplete="current-password">
+    <div class="pw-field">
+      <input type="password" id="pw" placeholder="パスワード" autocomplete="current-password">
+      <button type="button" class="pw-toggle" id="pwToggle" aria-label="パスワードを表示"></button>
+    </div>
     <button class="btn" id="unlock">表示する</button>
     <div class="error" id="loginError"></div>
   </div>
@@ -330,6 +351,19 @@ function startApp(data) {
 document.getElementById("unlock").addEventListener("click", doUnlock);
 document.getElementById("pw").addEventListener("keydown", e => {
   if (e.key === "Enter") doUnlock();
+});
+
+// パスワードの表示／非表示トグル（目のマーク）
+const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const pwToggle = document.getElementById("pwToggle");
+pwToggle.innerHTML = EYE_ICON;
+pwToggle.addEventListener("click", () => {
+  const pwEl = document.getElementById("pw");
+  const reveal = pwEl.type === "password";
+  pwEl.type = reveal ? "text" : "password";
+  pwToggle.innerHTML = reveal ? EYE_OFF_ICON : EYE_ICON;
+  pwToggle.setAttribute("aria-label", reveal ? "パスワードを隠す" : "パスワードを表示");
 });
 
 async function doUnlock() {

@@ -57,13 +57,23 @@ allowed-tools: Read, Write, Edit, Bash, Glob
 - 処理した画像ファイル名を `data/processed.json` の `processed` 配列へ追加する
 - スキップした画像は `processed.json` に追加しない
 
-### 7. 暗号化とダッシュボード更新
+### 7. 暗号化
 - `python tools/encrypt.py` を実行して `docs/expenses.enc` を再生成する
 - コマンドが成功したことを確認する
 
-### 8. 結果報告
-取り込んだレシート数・商品数・合計金額、スキップした画像、追加した小分類を日本語でまとめて報告する。
-GitHubへの公開（push）が必要な場合は、push前に必ずユーザーへ確認する。
+### 8. GitHubへ公開（commit & push）
+- 変更ファイルをステージする:
+  `git add docs/expenses.enc data/categories.json data/processed.json`
+  （`config.json` と `data/expenses.json` は .gitignore 済みのためコミットされない）
+- 取り込んだ内容が分かるコミットメッセージでコミットする
+  （例: 「レシート3件を追加（2026-05-20〜2026-05-22）」）
+- **push する前に、必ずユーザーへ「公開サイトに反映してよいか」を確認する**
+- 確認が取れたら `git push` する。GitHub Pages への反映には数分かかる
+- ユーザーが今は公開しないと答えた場合は、コミットだけ済ませて push は保留する
+
+### 9. 結果報告
+取り込んだレシート数・商品数・合計金額、スキップした画像、追加した小分類、
+公開状況（push済みか保留か）を日本語でまとめて報告する。
 
 ## 注意事項
 - 破壊的操作はしない。`expenses.json` は追記のみ行う
