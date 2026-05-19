@@ -158,6 +158,23 @@
     margin-bottom: 10px;
     font-weight: 600;
   }
+  .cat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .cat-head h2 { margin-bottom: 0; }
+  .cat-back {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--accent-dark);
+    padding: 5px 10px;
+    flex-shrink: 0;
+  }
+  .cat-back.show { display: inline-flex; }
+  .cat-back:active { background: #eceff1; }
 
   .summary { display: flex; gap: 10px; }
   .summary .item { flex: 1; text-align: center; }
@@ -246,7 +263,10 @@
     </div>
 
     <div class="card">
-      <h2>カテゴリ別の内訳</h2>
+      <div class="cat-head">
+        <button type="button" class="cat-back" id="catBack">← 戻る</button>
+        <h2 id="catTitle">カテゴリ別の内訳</h2>
+      </div>
       <div class="chart-box"><canvas id="catChart"></canvas></div>
     </div>
 
@@ -278,6 +298,9 @@ const FALLBACK_COLORS = ["#26a69a", "#8d6e63", "#789262", "#5c6bc0", "#ec407a"];
 function colorFor(name, idx) {
   return CAT_COLORS[name] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
 }
+// 小分類（ドリルダウン）表示用の配色
+const MINOR_PALETTE = ["#26a69a", "#42a5f5", "#ff7043", "#ab47bc", "#ec407a",
+  "#9ccc65", "#ffca28", "#8d6e63", "#5c6bc0", "#29b6f6", "#66bb6a", "#ffa726"];
 
 // ===== 状態 =====
 let EXPENSES = [];      // レシート配列
@@ -285,6 +308,7 @@ let mode = "month";     // "day" | "month" | "year"
 let cursor = new Date();
 let catChart = null;
 let trendChart = null;
+let catDrill = null;   // null=大分類を表示 / 大分類名=その小分類を表示
 
 // ===== ユーティリティ =====
 function b64ToBytes(b64) {
@@ -400,6 +424,12 @@ document.querySelectorAll(".tabs button").forEach(btn => {
 document.getElementById("prev").addEventListener("click", () => { shift(-1); });
 document.getElementById("next").addEventListener("click", () => { shift(1); });
 
+// カテゴリ円グラフの「戻る」（小分類表示 → 大分類表示）
+document.getElementById("catBack").addEventListener("click", () => {
+  catDrill = null;
+  renderCategoryChart(periodReceipts());
+});
+
 function shift(dir) {
   if (mode === "day") cursor.setDate(cursor.getDate() + dir);
   else if (mode === "month") cursor.setMonth(cursor.getMonth() + dir);
@@ -430,6 +460,7 @@ function periodLabel() {
 
 // ===== 描画 =====
 function render() {
+  catDrill = null;   // 期間を切り替えたら大分類表示に戻す
   document.getElementById("periodLabel").textContent = periodLabel();
   const receipts = periodReceipts();
   renderSummary(receipts);
@@ -455,30 +486,66 @@ function renderSummary(receipts) {
 }
 
 function renderCategoryChart(receipts) {
-  const byCat = {};
-  receipts.forEach(r => r.items.forEach(it => {
-    byCat[it.major] = (byCat[it.major] || 0) + (Number(it.price) || 0);
-  }));
-  const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const titleEl = document.getElementById("catTitle");
+  const backBtn = document.getElementById("catBack");
+  const agg = {};
+
+  if (catDrill === null) {
+    // 大分類の内訳
+    receipts.forEach(r => r.items.forEach(it => {
+      agg[it.major] = (agg[it.major] || 0) + (Number(it.price) || 0);
+    }));
+    titleEl.textContent = "カテゴリ別の内訳";
+    backBtn.classList.remove("show");
+  } else {
+    // 選択した大分類に属する小分類の内訳
+    receipts.forEach(r => r.items.forEach(it => {
+      if (it.major === catDrill) {
+        agg[it.minor] = (agg[it.minor] || 0) + (Number(it.price) || 0);
+      }
+    }));
+    titleEl.textContent = catDrill + "の内訳";
+    backBtn.classList.add("show");
+  }
+
+  const entries = Object.entries(agg).sort((a, b) => b[1] - a[1]);
   const labels = entries.map(e => e[0]);
   const values = entries.map(e => e[1]);
-  const colors = labels.map((l, i) => colorFor(l, i));
+  const colors = (catDrill === null)
+    ? labels.map((l, i) => colorFor(l, i))
+    : labels.map((l, i) => MINOR_PALETTE[i % MINOR_PALETTE.length]);
 
   if (catChart) catChart.destroy();
   const ctx = document.getElementById("catChart");
   if (entries.length === 0) {
-    const c = ctx.getContext("2d");
-    c.clearRect(0, 0, ctx.width, ctx.height);
+    ctx.getContext("2d").clearRect(0, 0, ctx.width, ctx.height);
     return;
   }
+
+  // 大分類を選択 → その小分類表示へdrill down
+  function drillInto(index) {
+    if (catDrill !== null || index == null) return;
+    catDrill = labels[index];
+    renderCategoryChart(periodReceipts());
+  }
+
   catChart = new Chart(ctx, {
     type: "doughnut",
     data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 1, borderColor: "#fff" }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) drillInto(els[0].index); },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor =
+          (catDrill === null && els.length) ? "pointer" : "default";
+      },
       plugins: {
-        legend: { position: "bottom", labels: { font: { size: 11 }, padding: 10 } },
+        legend: {
+          position: "bottom",
+          labels: { font: { size: 11 }, padding: 10 },
+          onClick: (evt, item) => { drillInto(item.index); }
+        },
         tooltip: {
           callbacks: {
             label: c => {
