@@ -1,6 +1,6 @@
 ---
 description: receiptsフォルダの新しいレシート画像を解析・分類し、ダッシュボードを更新する
-allowed-tools: Read, Write, Edit, Bash, Glob
+allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__read_file
 ---
 
 # レシート自動取り込み・分類
@@ -11,18 +11,32 @@ allowed-tools: Read, Write, Edit, Bash, Glob
 ## 手順
 
 ### 1. 設定とデータの読み込み
-- `config.json` を読み、`receipts_folder`（レシート画像フォルダのパス）を取得する
-- `data/processed.json` を読み、処理済み画像ファイル名の一覧を取得する
+- `data/processed.json` を読み、処理済みファイルID（またはファイル名）の一覧を取得する
 - `data/categories.json` を読み、現在のカテゴリツリー（大分類→小分類）を把握する
 - `data/expenses.json` を読み、既存レシートとID採番状況を把握する
 
 ### 2. 未処理画像の特定
-- `receipts_folder` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
-- `processed.json` の一覧に無いファイルが「未処理画像」
+
+**Google Drive MCPが利用可能な場合（クラウド環境）:**
+- `mcp__gdrive__search` ツールで以下のクエリを実行し、receiptsフォルダ内の画像を取得する:
+  ```
+  'receipts' in parents and (mimeType contains 'image/jpeg' or mimeType contains 'image/png')
+  ```
+  ※ フォルダが見つからない場合は `name = 'receipts' and mimeType = 'application/vnd.google-apps.folder'` でフォルダIDを先に検索する
+- 取得したファイルの `id` が `processed.json` の一覧に無いものが「未処理画像」
 - 未処理が0件なら、その旨を伝えて終了する
+
+**Google Drive MCPが利用不可の場合（ローカル環境・フォールバック）:**
+- `config.json` を読み、`receipts_folder`（レシート画像フォルダのパス）を取得する
+- `receipts_folder` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
+- `processed.json` の一覧に無いファイル名が「未処理画像」
 - HEIC形式の画像があれば、iPhoneのカメラ設定を「互換性優先（JPEG保存）」にするようユーザーへ案内する
 
-### 3. 各画像の解析（1枚ずつ Read で画像を開く）
+### 3. 各画像の解析（1枚ずつ画像を開く）
+
+**Google Drive MCPの場合:** `mcp__gdrive__read_file` でファイルIDを指定して画像を取得する
+**ローカルの場合:** `Read` ツールで画像ファイルを開く
+
 各レシート画像から以下を抽出する:
 - **日付**: `YYYY-MM-DD` 形式に正規化する（「2026/5/19」「令和8年5月19日」等も変換）
 - **店名**: レシート上部の店舗名
@@ -51,10 +65,10 @@ allowed-tools: Read, Write, Edit, Bash, Glob
 
 ### 6. データへの反映（ユーザー確認・修正後）
 - 各レシートに `id` を採番する（`YYYYMMDD-NNN` 形式、同一日付内で001から連番）
-- `image` に元画像のファイル名を記録する
+- `image` に元画像のファイル名（またはGoogle DriveのファイルID）を記録する
 - `data/expenses.json` の `receipts` 配列へ追加する（順序は問わない。ダッシュボード側でソートする）
 - 新しい小分類を作った場合は `data/categories.json` を更新する
-- 処理した画像ファイル名を `data/processed.json` の `processed` 配列へ追加する
+- 処理したファイルのID（またはファイル名）を `data/processed.json` の `processed` 配列へ追加する
 - スキップした画像は `processed.json` に追加しない
 
 ### 7. 暗号化
