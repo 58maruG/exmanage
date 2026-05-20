@@ -75,7 +75,7 @@ pip install --ignore-installed cryptography google-auth google-api-python-client
 
 ### 6. データへの反映（ユーザー確認・修正後）
 - 各レシートに `id` を採番する（`YYYYMMDD-NNN` 形式、同一日付内で001から連番）
-- `image` に元画像のファイル名を記録する
+- `image` に元画像のファイル名（またはGoogle DriveのファイルID）を記録する
 - `data/expenses.json` の `receipts` 配列へ追加する（順序は問わない。ダッシュボード側でソートする）
 - 新しい小分類を作った場合は `data/categories.json` を更新する
 - 処理したファイルの **Google Drive ファイルID**（クラウド環境）または **ファイル名**（ローカル環境）を `data/processed.json` の `processed` 配列へ追加する
