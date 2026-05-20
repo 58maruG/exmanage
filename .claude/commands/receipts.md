@@ -10,19 +10,43 @@ allowed-tools: Read, Write, Edit, Bash, Glob
 
 ## 手順
 
-### 1. 設定とデータの読み込み
-- `config.json` を読み、`receipts_folder`（レシート画像フォルダのパス）を取得する
-- `data/processed.json` を読み、処理済み画像ファイル名の一覧を取得する
+### 1. 環境セットアップとデータの読み込み
+
+**依存パッケージのインストール（クラウド環境では毎回必要）:**
+```
+pip install --ignore-installed cryptography google-auth google-api-python-client -q
+```
+
+**`data/expenses.json` が存在しない場合（クラウド環境）:**
+- `DASHBOARD_PASSWORD` 環境変数が設定されているか確認する
+  - 未設定なら「`DASHBOARD_PASSWORD` 環境変数が必要です。code.claude.com のプロジェクト設定で追加してください。」と伝えて終了する
+- `python tools/decrypt.py` を実行して `docs/expenses.enc` から `data/expenses.json` を復号する
+- 失敗した場合はエラーを報告して終了する
+
+- `data/processed.json` を読み、処理済みファイルID（またはファイル名）の一覧を取得する
 - `data/categories.json` を読み、現在のカテゴリツリー（大分類→小分類）を把握する
 - `data/expenses.json` を読み、既存レシートとID採番状況を把握する
 
 ### 2. 未処理画像の特定
-- `receipts_folder` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
+
+**クラウド環境（`receipts/` フォルダが存在しない場合）:**
+- `GDRIVE_CLIENT_ID` 環境変数が設定されているか確認する
+  - 未設定なら「Google Drive 認証情報が設定されていません」と伝えて終了する
+- `python tools/gdrive_download.py` を実行して Google Drive からレシート画像をダウンロードする
+  - 出力に `"downloaded": []` が含まれる場合は未処理画像0件として終了する
+  - エラーが出た場合は内容をユーザーに報告して終了する
+
+**ローカル環境（`receipts/` フォルダが存在する場合）:**
+- `receipts/` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
 - `processed.json` の一覧に無いファイルが「未処理画像」
+
+**共通:**
 - 未処理が0件なら、その旨を伝えて終了する
 - HEIC形式の画像があれば、iPhoneのカメラ設定を「互換性優先（JPEG保存）」にするようユーザーへ案内する
 
 ### 3. 各画像の解析（1枚ずつ Read で画像を開く）
+`receipts/` フォルダ内の各画像ファイルを Read ツールで開く。
+
 各レシート画像から以下を抽出する:
 - **日付**: `YYYY-MM-DD` 形式に正規化する（「2026/5/19」「令和8年5月19日」等も変換）
 - **店名**: レシート上部の店舗名
@@ -51,14 +75,15 @@ allowed-tools: Read, Write, Edit, Bash, Glob
 
 ### 6. データへの反映（ユーザー確認・修正後）
 - 各レシートに `id` を採番する（`YYYYMMDD-NNN` 形式、同一日付内で001から連番）
-- `image` に元画像のファイル名を記録する
+- `image` に元画像のファイル名（またはGoogle DriveのファイルID）を記録する
 - `data/expenses.json` の `receipts` 配列へ追加する（順序は問わない。ダッシュボード側でソートする）
 - 新しい小分類を作った場合は `data/categories.json` を更新する
-- 処理した画像ファイル名を `data/processed.json` の `processed` 配列へ追加する
+- 処理したファイルの **Google Drive ファイルID**（クラウド環境）または **ファイル名**（ローカル環境）を `data/processed.json` の `processed` 配列へ追加する
 - スキップした画像は `processed.json` に追加しない
 
 ### 7. 暗号化
-- `python tools/encrypt.py` を実行して `docs/expenses.enc` を再生成する
+- `config.json` が存在する場合: `python tools/encrypt.py` を実行する
+- `config.json` が存在しない場合（クラウド環境）: `python tools/encrypt.py $DASHBOARD_PASSWORD` を実行する
 - コマンドが成功したことを確認する
 
 ### 8. GitHubへ公開（commit & push）
