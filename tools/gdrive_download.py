@@ -90,7 +90,16 @@ def download_file(service, file_id, dest_path):
 
 def main():
     creds = get_credentials()
-    service = build("drive", "v3", credentials=creds)
+    # httplib2 が環境変数の CA バンドルを無視するため明示的に指定する
+    import httplib2
+    ca_certs = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    if ca_certs:
+        http = httplib2.Http(ca_certs=ca_certs)
+    else:
+        http = httplib2.Http()
+    from google_auth_httplib2 import AuthorizedHttp
+    authorized_http = AuthorizedHttp(creds, http=http)
+    service = build("drive", "v3", http=authorized_http)
 
     folder_id = find_receipts_folder(service)
     images = list_images(service, folder_id)
