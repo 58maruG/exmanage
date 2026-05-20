@@ -48,7 +48,6 @@ def get_credentials():
         client_id=client_id,
         client_secret=client_secret,
         token_uri="https://oauth2.googleapis.com/token",
-        scopes=["https://www.googleapis.com/auth/drive"],
     )
 
 
@@ -136,12 +135,16 @@ def main():
         print(f"ダウンロード中: {img['name']} ...", flush=True)
         try:
             download_file(service, img["id"], dest)
-            move_to_done(service, img["id"], img.get("parents", [source_id]), done_folder_id)
-            print(f"  → '{DONE_FOLDER_NAME}' へ移動しました", flush=True)
             downloaded.append(img["name"])
         except Exception as e:
-            print(f"  エラー: {img['name']} の処理に失敗しました: {e}", flush=True)
+            print(f"  エラー: {img['name']} のダウンロードに失敗しました: {e}", flush=True)
             errors.append(img["name"])
+            continue
+        try:
+            move_to_done(service, img["id"], img.get("parents", [source_id]), done_folder_id)
+            print(f"  → '{DONE_FOLDER_NAME}' へ移動しました", flush=True)
+        except Exception as e:
+            print(f"  警告: {img['name']} の移動に失敗しました（ダウンロードは完了）: {e}", flush=True)
 
     print(json.dumps({"downloaded": downloaded, "errors": errors}, ensure_ascii=False))
 
