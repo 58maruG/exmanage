@@ -3,7 +3,6 @@ config.json
 
 # 平文の支出マスターデータ
 data/expenses.json
-data/processed.json
 
 # レシート画像（リポジトリには含めない）
 receipts/
