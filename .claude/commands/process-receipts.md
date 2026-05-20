@@ -10,7 +10,14 @@ allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__
 
 ## 手順
 
-### 1. 設定とデータの読み込み
+### 1. 環境セットアップとデータの読み込み
+
+**`data/expenses.json` が存在しない場合（クラウド環境）:**
+- `DASHBOARD_PASSWORD` 環境変数が設定されているか確認する
+  - 未設定なら「`DASHBOARD_PASSWORD` 環境変数が必要です。code.claude.com のプロジェクト設定で追加してください。」と伝えて終了する
+- `python tools/decrypt.py` を実行して `docs/expenses.enc` から `data/expenses.json` を復号する
+- 失敗した場合はエラーを報告して終了する
+
 - `data/processed.json` を読み、処理済みファイルID（またはファイル名）の一覧を取得する
 - `data/categories.json` を読み、現在のカテゴリツリー（大分類→小分類）を把握する
 - `data/expenses.json` を読み、既存レシートとID採番状況を把握する
@@ -72,7 +79,8 @@ allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__
 - スキップした画像は `processed.json` に追加しない
 
 ### 7. 暗号化
-- `python tools/encrypt.py` を実行して `docs/expenses.enc` を再生成する
+- `config.json` が存在する場合: `python tools/encrypt.py` を実行する
+- `config.json` が存在しない場合（クラウド環境）: `python tools/encrypt.py $DASHBOARD_PASSWORD` を実行する
 - コマンドが成功したことを確認する
 
 ### 8. GitHubへ公開（commit & push）
