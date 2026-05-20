@@ -1,6 +1,6 @@
 ---
 description: receiptsフォルダの新しいレシート画像を解析・分類し、ダッシュボードを更新する
-allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__read_file
+allowed-tools: Read, Write, Edit, Bash, Glob
 ---
 
 # レシート自動取り込み・分類
@@ -11,6 +11,11 @@ allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__
 ## 手順
 
 ### 1. 環境セットアップとデータの読み込み
+
+**依存パッケージのインストール（クラウド環境では毎回必要）:**
+```
+pip install --ignore-installed cryptography google-auth google-api-python-client -q
+```
 
 **`data/expenses.json` が存在しない場合（クラウド環境）:**
 - `DASHBOARD_PASSWORD` 環境変数が設定されているか確認する
@@ -24,25 +29,23 @@ allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__
 
 ### 2. 未処理画像の特定
 
-**Google Drive MCPが利用可能な場合（クラウド環境）:**
-- `mcp__gdrive__search` ツールで以下のクエリを実行し、receiptsフォルダ内の画像を取得する:
-  ```
-  'receipts' in parents and (mimeType contains 'image/jpeg' or mimeType contains 'image/png')
-  ```
-  ※ フォルダが見つからない場合は `name = 'receipts' and mimeType = 'application/vnd.google-apps.folder'` でフォルダIDを先に検索する
-- 取得したファイルの `id` が `processed.json` の一覧に無いものが「未処理画像」
-- 未処理が0件なら、その旨を伝えて終了する
+**クラウド環境（`receipts/` フォルダが存在しない場合）:**
+- `GDRIVE_CLIENT_ID` 環境変数が設定されているか確認する
+  - 未設定なら「Google Drive 認証情報が設定されていません」と伝えて終了する
+- `python tools/gdrive_download.py` を実行して Google Drive からレシート画像をダウンロードする
+  - 出力に `"downloaded": []` が含まれる場合は未処理画像0件として終了する
+  - エラーが出た場合は内容をユーザーに報告して終了する
 
-**Google Drive MCPが利用不可の場合（ローカル環境・フォールバック）:**
-- `config.json` を読み、`receipts_folder`（レシート画像フォルダのパス）を取得する
-- `receipts_folder` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
-- `processed.json` の一覧に無いファイル名が「未処理画像」
+**ローカル環境（`receipts/` フォルダが存在する場合）:**
+- `receipts/` 内の画像ファイル（.jpg .jpeg .png）を Glob で一覧する
+- `processed.json` の一覧に無いファイルが「未処理画像」
+
+**共通:**
+- 未処理が0件なら、その旨を伝えて終了する
 - HEIC形式の画像があれば、iPhoneのカメラ設定を「互換性優先（JPEG保存）」にするようユーザーへ案内する
 
-### 3. 各画像の解析（1枚ずつ画像を開く）
-
-**Google Drive MCPの場合:** `mcp__gdrive__read_file` でファイルIDを指定して画像を取得する
-**ローカルの場合:** `Read` ツールで画像ファイルを開く
+### 3. 各画像の解析（1枚ずつ Read で画像を開く）
+`receipts/` フォルダ内の各画像ファイルを Read ツールで開く。
 
 各レシート画像から以下を抽出する:
 - **日付**: `YYYY-MM-DD` 形式に正規化する（「2026/5/19」「令和8年5月19日」等も変換）
@@ -75,7 +78,7 @@ allowed-tools: Read, Write, Edit, Bash, Glob, mcp__gdrive__search, mcp__gdrive__
 - `image` に元画像のファイル名（またはGoogle DriveのファイルID）を記録する
 - `data/expenses.json` の `receipts` 配列へ追加する（順序は問わない。ダッシュボード側でソートする）
 - 新しい小分類を作った場合は `data/categories.json` を更新する
-- 処理したファイルのID（またはファイル名）を `data/processed.json` の `processed` 配列へ追加する
+- 処理したファイルの **Google Drive ファイルID**（クラウド環境）または **ファイル名**（ローカル環境）を `data/processed.json` の `processed` 配列へ追加する
 - スキップした画像は `processed.json` に追加しない
 
 ### 7. 暗号化
