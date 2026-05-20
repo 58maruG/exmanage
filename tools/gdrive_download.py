@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Google Drive の receipts フォルダから未処理画像をダウンロードする。
+"""Google Drive の receipt フォルダから未処理画像をダウンロードし、処理済みフォルダへ移動する。
 
 環境変数:
     GDRIVE_CLIENT_ID       OAuth クライアントID
     GDRIVE_CLIENT_SECRET   OAuth クライアントシークレット
     GDRIVE_REFRESH_TOKEN   リフレッシュトークン
-    GDRIVE_FOLDER_NAME     receipts フォルダ名（省略時: "receipts"）
+    GDRIVE_FOLDER_NAME     取り込みフォルダ名（省略時: "receipt"）
+    GDRIVE_DONE_FOLDER     処理済み移動先フォルダ名（省略時: "Read receipt(仮)"）
 
 使い方:
     python tools/gdrive_download.py
-    → receipts/ フォルダに画像をダウンロードし、ファイル名一覧を標準出力する
+    → receipts/ フォルダに画像をダウンロードし、GDrive 上のファイルを処理済みフォルダへ移動する
 """
 
 import json
@@ -21,8 +22,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROCESSED_PATH = os.path.join(ROOT, "data", "processed.json")
 RECEIPTS_DIR = os.path.join(ROOT, "receipts")
+
+SOURCE_FOLDER_NAME = os.environ.get("GDRIVE_FOLDER_NAME", "receipt")
+DONE_FOLDER_NAME = os.environ.get("GDRIVE_DONE_FOLDER", "Read receipt")
 
 
 def get_credentials():
@@ -45,18 +48,29 @@ def get_credentials():
         client_id=client_id,
         client_secret=client_secret,
         token_uri="https://oauth2.googleapis.com/token",
-        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        scopes=["https://www.googleapis.com/auth/drive"],
     )
 
 
-def find_receipts_folder(service):
-    folder_name = os.environ.get("GDRIVE_FOLDER_NAME", "receipts")
-    query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+def find_folder(service, name):
+    query = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     result = service.files().list(q=query, fields="files(id, name)").execute()
     folders = result.get("files", [])
-    if not folders:
-        sys.exit(f"エラー: Google Drive に '{folder_name}' フォルダが見つかりません。")
-    return folders[0]["id"]
+    return folders[0]["id"] if folders else None
+
+
+def find_or_create_done_folder(service):
+    folder_id = find_folder(service, DONE_FOLDER_NAME)
+    if folder_id:
+        return folder_id
+
+    print(f"フォルダ '{DONE_FOLDER_NAME}' が見つからないため作成します...", flush=True)
+    meta = {
+        "name": DONE_FOLDER_NAME,
+        "mimeType": "application/vnd.google-apps.folder",
+    }
+    result = service.files().create(body=meta, fields="id").execute()
+    return result["id"]
 
 
 def list_images(service, folder_id):
@@ -65,18 +79,9 @@ def list_images(service, folder_id):
         "(mimeType = 'image/jpeg' or mimeType = 'image/png' or mimeType = 'image/heic')"
     )
     result = service.files().list(
-        q=query, fields="files(id, name, mimeType)"
+        q=query, fields="files(id, name, mimeType, parents)"
     ).execute()
     return result.get("files", [])
-
-
-def load_processed_ids():
-    try:
-        with open(PROCESSED_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        return set(data.get("processed", []))
-    except FileNotFoundError:
-        return set()
 
 
 def download_file(service, file_id, dest_path):
@@ -86,6 +91,16 @@ def download_file(service, file_id, dest_path):
         done = False
         while not done:
             _, done = downloader.next_chunk()
+
+
+def move_to_done(service, file_id, current_parents, done_folder_id):
+    """ファイルを処理済みフォルダへ移動する（親を差し替え）。"""
+    service.files().update(
+        fileId=file_id,
+        addParents=done_folder_id,
+        removeParents=",".join(current_parents),
+        fields="id, parents",
+    ).execute()
 
 
 def main():
@@ -101,30 +116,34 @@ def main():
     authorized_http = AuthorizedHttp(creds, http=http)
     service = build("drive", "v3", http=authorized_http)
 
-    folder_id = find_receipts_folder(service)
-    images = list_images(service, folder_id)
+    source_id = find_folder(service, SOURCE_FOLDER_NAME)
+    if not source_id:
+        sys.exit(f"エラー: Google Drive に '{SOURCE_FOLDER_NAME}' フォルダが見つかりません。")
+
+    images = list_images(service, source_id)
 
     if not images:
-        print("Google Drive の receipts フォルダに画像が見つかりません。")
+        print(f"Google Drive の '{SOURCE_FOLDER_NAME}' フォルダに画像が見つかりません。")
         return
 
-    processed_ids = load_processed_ids()
-    new_images = [img for img in images if img["id"] not in processed_ids]
-
-    if not new_images:
-        print("未処理の画像はありません。")
-        return
-
+    done_folder_id = find_or_create_done_folder(service)
     os.makedirs(RECEIPTS_DIR, exist_ok=True)
 
     downloaded = []
-    for img in new_images:
+    errors = []
+    for img in images:
         dest = os.path.join(RECEIPTS_DIR, img["name"])
         print(f"ダウンロード中: {img['name']} ...", flush=True)
-        download_file(service, img["id"], dest)
-        downloaded.append({"id": img["id"], "name": img["name"]})
+        try:
+            download_file(service, img["id"], dest)
+            move_to_done(service, img["id"], img.get("parents", [source_id]), done_folder_id)
+            print(f"  → '{DONE_FOLDER_NAME}' へ移動しました", flush=True)
+            downloaded.append(img["name"])
+        except Exception as e:
+            print(f"  エラー: {img['name']} の処理に失敗しました: {e}", flush=True)
+            errors.append(img["name"])
 
-    print(json.dumps({"downloaded": downloaded}, ensure_ascii=False))
+    print(json.dumps({"downloaded": downloaded, "errors": errors}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
